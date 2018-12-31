@@ -403,7 +403,7 @@ class MainThread(threading.Thread):
 def parse_argv(argv):
     if len(argv) < 4:
         file_name = os.path.basename(__file__)
-        print("Usage: pthon {} ID PW lv123456789".format(file_name))
+        print("Usage: python {} ID PW lv123456789".format(file_name))
         sys.exit()
     _, n_id, n_pw, lv_id = argv
 
