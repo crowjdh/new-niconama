@@ -8,6 +8,7 @@ import threading
 import time
 import re
 import multiprocessing as mp
+from getpass import getpass
 
 
 magic_offset = -20
@@ -166,8 +167,9 @@ class CommentSocketThread(threading.Thread):
         }
         res_from, when = -200, self.open_time
 
-        ws = websocket.create_connection(self.message_server_uri, timeout=1, header=headers)
+        ws = websocket.create_connection(self.message_server_uri, header=headers)
         self.send_message(ws, when, res_from)
+        ws.settimeout(1)
 
         chats = None
         while ws.connected and not self.event.is_set():
@@ -183,16 +185,14 @@ class CommentSocketThread(threading.Thread):
                 if content.startswith('rs'):
                     chats = []
                 elif content.startswith('rf'):
-                    if len(chats) == 0:
-                        continue
                     self.extend_chats(chats)
 
                     disconnect_chats = [chat for chat in chats if chat.content == '/disconnect']
                     if len(disconnect_chats) > 0:
                         self.save_chats()
                         break
-                    last_chat = chats[-1]
-                    res_from, when = last_chat.no + 1, when + 90
+                    res_from = chats[-1].no + 1 if len(chats) > 0 else -200
+                    when += 90
 
                     self.send_message(ws, when, res_from)
             elif 'chat' in message_json:
@@ -231,7 +231,7 @@ class CommentSocketThread(threading.Thread):
 
 
 class PlaylistLoader(threading.Thread):
-    interval = 0.5
+    interval = 1
 
     def __init__(self, sess, master_url, start_time, event, ts_queue):
         threading.Thread.__init__(self)
@@ -410,6 +410,14 @@ def parse_argv(argv):
     return n_id, n_pw, lv_id
 
 
+def get_args():
+    n_id = input('E-mail: ')
+    n_pw = getpass('Password: ')
+    lv_id = input('lv id(lv123456789): ')
+
+    return n_id, n_pw, lv_id
+
+
 def ensure_output_directory(output_dir='output'):
     if os.path.isdir(output_dir):
         print("Directory already exists.")
@@ -420,7 +428,8 @@ def ensure_output_directory(output_dir='output'):
 
 
 def main(argv):
-    n_id, n_pw, lv_id = parse_argv(argv)
+    n_id, n_pw, lv_id = get_args()
+    # n_id, n_pw, lv_id = parse_argv(argv)
     output_dir = ensure_output_directory()
     with requests.session() as sess:
         if not login(sess, n_id, n_pw):
@@ -462,8 +471,8 @@ def get_start_time(tasks):
             undone_ts_names.append(ts_time)
         else:
             done_ts_names.append(ts_time)
-    print("undone_ts_names: {}".format(undone_ts_names), file=sys.stderr)
-    print("done_ts_names: {}".format(done_ts_names), file=sys.stderr)
+    # print("undone_ts_names: {}".format(undone_ts_names), file=sys.stderr)
+    # print("done_ts_names: {}".format(done_ts_names), file=sys.stderr)
     if len(undone_ts_names) > 0:
         ts_name = sorted(undone_ts_names)[0]
     else:
@@ -494,17 +503,14 @@ def start_emulation(sess, video_info, output_dir):
 
         should_break = is_done.value == 1
         if should_break:
-            print(1)
             # If there was no error, wait for pool to download remaining videos
             for _ in range(os.cpu_count()):
                 ts_queue.put(None)
             pool.join()
             break
         else:
-            print(2)
             # If error has occurred, terminate pool immediately.
             pool.terminate()
-    print(3)
 
 
 if __name__ == '__main__':
